@@ -203,11 +203,9 @@ export async function issueAccessToken() {
     }
 
     const json = await res.json();
-    // console.log("[issueAccessToken] success body", json);
     const token = json.data?.accessToken;
 
     if (!token) {
-      // console.log("[issueAccessToken] missing accessToken");
       notifyAuthInvalid();
       throw new Error("AUTH_INVALID");
     }
@@ -235,36 +233,17 @@ type AuthFetchInit = RequestInit & { skipAuthRefresh?: boolean };
 export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
   // 🔴 이미 세션 종료 상태면 요청 자체 차단
   if (authInvalidated) {
-    // console.log("[authFetch] blocked: authInvalidated", {
-    //   input,
-    //   skipAuthRefresh: init.skipAuthRefresh,
-    // });
     throw new Error("AUTH_INVALID");
   }
   if (isLoggedOutFlag()) {
-    // console.log("[authFetch] blocked: loggedOutFlag", {
-    //   input,
-    //   skipAuthRefresh: init.skipAuthRefresh,
-    // });
     throw new Error("LOGGED_OUT");
   }
 
   let token = getAccessToken();
-  // console.log("[authFetch] start", {
-  //   input,
-  //   hasToken: Boolean(token),
-  //   tokenPrefix: token ? token.slice(0, 10) : null,
-  //   tokenLength: token?.length ?? 0,
-  //   skipAuthRefresh: init.skipAuthRefresh,
-  // });
 
   // AT 없으면 1회 재발급
   if ((!token || isAccessTokenExpired(token)) && !init.skipAuthRefresh) {
-    // console.log("[authFetch] no token, issuing access token");
     token = await issueAccessToken(); // 실패 시 throw
-    // console.log("[authFetch] issued access token", {
-    //   hasToken: Boolean(token),
-    // });
   }
 
   const makeHeaders = (bearer?: string) => {
@@ -276,23 +255,12 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
   };
 
   const requestHeaders = makeHeaders(token ?? undefined);
-  // const authHeader = requestHeaders.get("Authorization") ?? "";
-  // console.log("[authFetch] request headers", {
-  //   input,
-  //   hasAuthorization: Boolean(authHeader),
-  //   authHeaderPrefix: authHeader ? authHeader.slice(0, 16) : null,
-  //   credentials: init.credentials ?? "include",
-  // });
   // 1차 요청
   let res = await fetch(input, {
     ...init,
     headers: requestHeaders,
     credentials: init.credentials ?? "include",
   });
-  // console.log("[authFetch] response", {
-  //   input,
-  //   status: res.status,
-  // });
 
   if (res.status !== 401 || init.skipAuthRefresh) {
     return res;
@@ -300,7 +268,6 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
 
   // 🔁 AT 만료 → 1회만 재발급 후 재시도
   try {
-    // console.log("[authFetch] 401 received, refreshing token");
     const refreshed = await issueAccessToken();
 
     res = await fetch(input, {
@@ -308,13 +275,8 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
       headers: makeHeaders(refreshed),
       credentials: init.credentials ?? "include",
     });
-    // console.log("[authFetch] retry response", {
-    //   input,
-    //   status: res.status,
-    // });
 
     if (res.status === 401) {
-      // console.log("[authFetch] retry 401 -> auth invalid");
       notifyAuthInvalid();
       throw new Error("AUTH_INVALID");
     }
@@ -322,7 +284,6 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
     return res;
   } catch (error) {
     if (error instanceof Error && error.message === "AUTH_INVALID") {
-      // console.log("[authFetch] refresh failed -> auth invalid");
       notifyAuthInvalid();
       throw error;
     }
