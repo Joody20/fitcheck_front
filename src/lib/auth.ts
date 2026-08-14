@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/src/config/api";
+import { localApiFetch } from "@/src/mocks/localApi";
 /* =======================
  * Auth State (Module Scope)
  * ======================= */
@@ -151,64 +151,9 @@ export async function issueAccessToken() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    let res: Response;
-    try {
-      // console.log("[issueAccessToken] request /api/auth/tokens start");
-      res = await fetch(`${API_BASE_URL}/api/auth/tokens`, {
-        method: "POST",
-        credentials: "include",
-      });
-      // console.log("[issueAccessToken] response", { status: res.status });
-    } catch (error) {
-      if (typeof window !== "undefined") {
-        console.warn("[issueAccessToken] network error", error);
-      }
-      throw new Error("REFRESH_FAILED");
-    }
-
-    if (!res.ok) {
-      const body = await res
-        .clone()
-        .json()
-        .catch(() => null);
-      if (typeof window !== "undefined") {
-        console.warn("[issueAccessToken] failed", {
-          status: res.status,
-          body,
-        });
-      }
-
-      if (res.status === 401 || res.status === 403) {
-        if (typeof window !== "undefined") {
-          try {
-            const message =
-              (body as { message?: string } | null)?.message ?? "";
-            if (message) {
-              window.sessionStorage.setItem(
-                "katopia.authInvalidMessage",
-                message,
-              );
-            } else {
-              window.sessionStorage.removeItem("katopia.authInvalidMessage");
-            }
-          } catch {
-            // ignore storage errors
-          }
-        }
-        notifyAuthInvalid();
-        throw new Error("AUTH_INVALID");
-      }
-
-      throw new Error("REFRESH_FAILED");
-    }
-
-    const json = await res.json();
-    const token = json.data?.accessToken;
-
-    if (!token) {
-      notifyAuthInvalid();
-      throw new Error("AUTH_INVALID");
-    }
+    // The standalone frontend uses a local demo session instead of refresh
+    // cookies and never makes an authentication request.
+    const token = "frontend-demo-token";
 
     setAccessToken(token);
     setLoggedOutFlag(false);
@@ -256,7 +201,7 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
 
   const requestHeaders = makeHeaders(token ?? undefined);
   // 1차 요청
-  let res = await fetch(input, {
+  let res = await localApiFetch(input, {
     ...init,
     headers: requestHeaders,
     credentials: init.credentials ?? "include",
@@ -270,7 +215,7 @@ export async function authFetch(input: RequestInfo, init: AuthFetchInit = {}) {
   try {
     const refreshed = await issueAccessToken();
 
-    res = await fetch(input, {
+    res = await localApiFetch(input, {
       ...init,
       headers: makeHeaders(refreshed),
       credentials: init.credentials ?? "include",

@@ -1,7 +1,7 @@
 "use client";
 
-import type { IMessage, StompSubscription } from "@stomp/stompjs";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { LocalMessageFrame, LocalSubscription } from "@/src/features/chat/hooks/useChatSocketConnection";
 
 import { getChatMessages } from "@/src/features/chat/api/getChatMessages";
 import { normalizeChatMessage } from "@/src/features/chat/utils/normalizeChatMessage";
@@ -46,9 +46,9 @@ type Params = {
   socketStatus: "idle" | "connecting" | "connected" | "error";
   subscribe: (
     destination: string,
-    callback: (message: IMessage) => void,
+    callback: (message: LocalMessageFrame) => void,
     headers?: Record<string, string>,
-  ) => StompSubscription | null;
+  ) => LocalSubscription | null;
   publish: ({
     destination,
     body,
@@ -142,13 +142,13 @@ export function useChatMessages({
   useEffect(() => {
     if (socketStatus !== "connected") return;
 
-    let messageSubscription: StompSubscription | null = null;
-    let readStateSubscription: StompSubscription | null = null;
+    let messageSubscription: LocalSubscription | null = null;
+    let readStateSubscription: LocalSubscription | null = null;
     const messageDestination = buildChatRoomSubscribeDestination(roomId);
     const readStateDestination =
       buildChatRoomReadStateSubscribeDestination(roomId);
 
-    const handleMessage = (frame: IMessage) => {
+    const handleMessage = (frame: LocalMessageFrame) => {
       const rawBody = frame.body?.trim();
       if (!rawBody) return;
 
@@ -175,7 +175,7 @@ export function useChatMessages({
       );
     };
 
-    const handleReadState = (frame: IMessage) => {
+    const handleReadState = (frame: LocalMessageFrame) => {
       const rawBody = frame.body?.trim();
       if (!rawBody) return;
 

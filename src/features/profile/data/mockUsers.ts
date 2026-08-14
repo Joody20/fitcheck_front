@@ -17,7 +17,7 @@ export const MOCK_USERS: MockUserProfile[] = [
     weight: 80,
     profileImage: undefined,
     posts: Array.from({ length: 6 }).map(
-      (_, i) => `https://picsum.photos/seed/profile1-${i}/300/400`,
+      (_, i) => ["/images/post_ex.webp", "/images/vote_1.jpeg", "/images/vote_2.jpeg"][i % 3],
     ),
   },
   {
@@ -28,7 +28,7 @@ export const MOCK_USERS: MockUserProfile[] = [
     weight: 55,
     profileImage: undefined,
     posts: Array.from({ length: 9 }).map(
-      (_, i) => `https://picsum.photos/seed/profile2-${i}/300/400`,
+      (_, i) => ["/images/vote_3.webp", "/images/vote_4.webp", "/images/post_ex.webp"][i % 3],
     ),
   },
   {
@@ -39,7 +39,7 @@ export const MOCK_USERS: MockUserProfile[] = [
     weight: 70,
     profileImage: undefined,
     posts: Array.from({ length: 6 }).map(
-      (_, i) => `https://picsum.photos/seed/profile3-${i}/300/400`,
+      (_, i) => ["/images/vote_2.jpeg", "/images/post_ex.webp", "/images/vote_1.jpeg"][i % 3],
     ),
   },
   {
@@ -50,7 +50,7 @@ export const MOCK_USERS: MockUserProfile[] = [
     weight: 52,
     profileImage: undefined,
     posts: Array.from({ length: 6 }).map(
-      (_, i) => `https://picsum.photos/seed/profile4-${i}/300/400`,
+      (_, i) => ["/images/vote_4.webp", "/images/vote_3.webp", "/images/post_ex.webp"][i % 3],
     ),
   },
 ];

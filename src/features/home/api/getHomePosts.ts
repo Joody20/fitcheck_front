@@ -1,10 +1,4 @@
-import { API_BASE_URL } from "@/src/config/api";
-import {
-  clearAccessToken,
-  getAccessToken,
-  isAccessTokenExpired,
-  issueAccessToken,
-} from "@/src/lib/auth";
+import { localApiFetch } from "@/src/mocks/localApi";
 import { normalizeImageUrls } from "@/src/features/upload/utils/normalizeImageUrls";
 
 export type HomeAuthor = {
@@ -102,118 +96,27 @@ function buildHomePostsQuery(params?: {
   return searchParams.toString();
 }
 
-function buildHomePostsUpstreamUrl(params?: {
+function buildHomePostsUrl(params?: {
   size?: number;
   after?: string | null;
 }) {
   const query = buildHomePostsQuery(params);
   return query
-    ? `${API_BASE_URL}/api/home/posts?${query}`
-    : `${API_BASE_URL}/api/home/posts`;
+    ? `/api/home/posts?${query}`
+    : "/api/home/posts";
 }
 
 export async function getHomePosts(params?: {
   size?: number;
   after?: string;
 }): Promise<GetHomePostsResponse> {
-  const url = buildHomePostsUpstreamUrl(params);
-  let res: Response;
-  try {
-    const existing = getAccessToken();
-    const candidateToken =
-      existing && !isAccessTokenExpired(existing) ? existing : null;
-
-    res = await fetch(url, {
-      method: "GET",
-      cache: "no-store",
-      credentials: "include",
-      headers: candidateToken
-        ? {
-            Authorization: `Bearer ${candidateToken}`,
-          }
-        : undefined,
-    });
-
-    // 토큰 발급을 선행하지 않고, 401일 때만 재발급 후 1회 재시도합니다.
-    if (res.status === 401) {
-      clearAccessToken();
-      const refreshed = await issueAccessToken();
-      res = await fetch(url, {
-        method: "GET",
-        cache: "no-store",
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${refreshed}`,
-        },
-      });
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (
-      message === "AUTH_INVALID" ||
-      message === "LOGGED_OUT" ||
-      message === "REFRESH_FAILED"
-    ) {
-      return { posts: [], nextCursor: null };
-    }
-    throw error;
-  }
-
-  const result = await res.json();
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      return { posts: [], nextCursor: null };
-    }
-    throw result;
-  }
-
-  return normalizeHomePostsResponse(result);
-}
-
-async function issueServerAccessToken(
-  cookieHeader?: string | null,
-): Promise<string | null> {
-  if (!cookieHeader) return null;
-  const tokenRes = await fetch(`${API_BASE_URL}/api/auth/tokens`, {
-    method: "POST",
-    headers: { Cookie: cookieHeader },
-    cache: "no-store",
-  });
-
-  if (!tokenRes.ok) return null;
-
-  const tokenJson = (await tokenRes.json().catch(() => null)) as {
-    data?: { accessToken?: string | null };
-  } | null;
-  return tokenJson?.data?.accessToken ?? null;
+  const res = await localApiFetch(buildHomePostsUrl(params));
+  return normalizeHomePostsResponse(await res.json());
 }
 
 export async function getHomePostsServer(
   options: HomePostsFetchOptions = {},
 ): Promise<GetHomePostsResponse> {
-  const token = await issueServerAccessToken(options.cookieHeader);
-  if (!token) return { posts: [], nextCursor: null };
-
-  const res = await fetch(
-    buildHomePostsUpstreamUrl({
-      size: options.size,
-      after: options.after ?? undefined,
-    }),
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      cache: "no-store",
-    },
-  );
-
-  if (!res.ok) {
-    if (res.status === 401) return { posts: [], nextCursor: null };
-    throw new Error(`Failed to fetch home posts: ${res.status}`);
-  }
-
-  const result = await res.json().catch(() => ({}));
-  return normalizeHomePostsResponse(result);
+  void options.cookieHeader;
+  return getHomePosts({ size: options.size, after: options.after ?? undefined });
 }

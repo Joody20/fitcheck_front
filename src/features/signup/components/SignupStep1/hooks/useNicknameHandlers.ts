@@ -1,11 +1,5 @@
 import { useCallback, useRef, useState } from "react";
 import type { UseFormTrigger, FieldValues, Path } from "react-hook-form";
-import { API_BASE_URL } from "@/src/config/api";
-
-type CheckNicknameResponse = {
-  data?: { isAvailable?: boolean };
-  isAvailable?: boolean;
-};
 
 export function useNicknameHandlers<T extends FieldValues>(
   trigger: UseFormTrigger<T>,
@@ -35,19 +29,8 @@ export function useNicknameHandlers<T extends FieldValues>(
           return false;
         }
 
-        const res = await fetch(
-          `${API_BASE_URL}/api/members/check?nickname=${encodeURIComponent(
-            nickname,
-          )}`,
-          { method: "GET", credentials: "include" },
-        );
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const payload = (await res.json()) as CheckNicknameResponse;
-
-        const isAvailable =
-          payload?.data?.isAvailable ?? payload?.isAvailable ?? null;
+        // Nicknames are local-only in the frontend demo.
+        const isAvailable = nickname.trim().length > 0;
 
         if (isAvailable === true) {
           setVerifiedNickname(nickname);

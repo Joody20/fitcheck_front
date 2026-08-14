@@ -3,7 +3,6 @@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { KAKAO_OAUTH_URL } from "@/src/config/api";
 import { setLoggedOutFlag } from "@/src/lib/auth";
 
 type Props = {
@@ -18,7 +17,8 @@ export default function LoginBottomSheet({ persist = false }: Props) {
       // ignore storage errors
     }
     setLoggedOutFlag(false);
-    window.location.href = KAKAO_OAUTH_URL;
+    // A local demo session is created by AuthProvider on the next render.
+    window.location.assign("/home");
   };
 
   return (

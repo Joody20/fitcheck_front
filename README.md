@@ -15,7 +15,7 @@
 
 ### 프로젝트 배포/테스트 기준 주소
 
-- 개발 테스트 기준 URL: `https://dev.fitcheck.kr`
+- 로컬 실행 기준 URL: `http://localhost:3000`
 
 ## 2. 프로젝트 배경 및 필요성
 
@@ -131,11 +131,9 @@
 - `zod`
 - `@hookform/resolvers`
 
-### Real-time / Communication
+### Local demo data
 
-- `@stomp/stompjs`
-- `event-source-polyfill`
-- `sockjs-client`
+- `src/mocks/localApi.ts` 기반의 브라우저 로컬 목업 데이터
 
 ### Performance / UX
 
@@ -250,30 +248,12 @@ npm run start
 프로젝트에서 확인되는 주요 환경 변수는 아래와 같습니다.
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=
-NEXT_PUBLIC_CHAT_SOCKET_URL=
-NEXT_PUBLIC_IMAGE_BASE_URL=
-NEXT_PUBLIC_KAKAO_OAUTH_URL=
-NEXT_PUBLIC_GA_ID=
-NEXT_PUBLIC_GA_MEASUREMENT_ID=
-NEXT_PUBLIC_GTM_ID=
-API_BASE_URL=
-REVALIDATE_SECRET=
 BASE_URL=
-STORAGE_STATE=
 ```
 
 ### 환경 변수 설명
 
-- `NEXT_PUBLIC_API_BASE_URL`: 백엔드 API 기본 주소
-- `NEXT_PUBLIC_CHAT_SOCKET_URL`: 채팅 WebSocket 서버 주소
-- `NEXT_PUBLIC_IMAGE_BASE_URL`: 이미지 CDN 기본 주소
-- `NEXT_PUBLIC_KAKAO_OAUTH_URL`: 카카오 로그인 연동 주소
-- `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_GTM_ID`: 분석 도구 연동용 값
-- `API_BASE_URL`: 서버 사이드 route handler에서 사용할 업스트림 API 주소
-- `REVALIDATE_SECRET`: 캐시 재검증 보호용 시크릿
 - `BASE_URL`: Playwright 테스트 기준 URL
-- `STORAGE_STATE`: Playwright 로그인 상태 파일 경로
 
 ## 10. 사용 가능한 스크립트
 

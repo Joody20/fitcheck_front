@@ -6,8 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { API_BASE_URL } from "@/src/config/api";
-import { issueAccessToken } from "@/src/lib/auth";
+import { authFetch, issueAccessToken } from "@/src/lib/auth";
 import { useAuth } from "@/src/features/auth/providers/AuthProvider";
 import {
   requestUploadPresign,
@@ -122,7 +121,7 @@ export function useSignupStep2() {
               : null,
         };
 
-        const res = await fetch(`${API_BASE_URL}/api/members`, {
+        const res = await authFetch("/api/members", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -163,7 +162,7 @@ export function useSignupStep2() {
           }
 
           try {
-            await fetch(`${API_BASE_URL}/api/members`, {
+            await authFetch("/api/members", {
               method: "PATCH",
               headers: {
                 "Content-Type": "application/json",
