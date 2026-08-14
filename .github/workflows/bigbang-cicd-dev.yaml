@@ -1,0 +1,254 @@
+name: CI/CD (dev) - Next.js
+
+on:
+  push:
+    branches: ["dev"]
+
+# github.ref는 refs/heads/dev입니다. 새로운 푸시가 있을 때마다 기존 진행 중인 워크플로우를 취소합니다.
+concurrency:
+  group: cicd-dev-nextjs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci-and-delivery:
+    name: CI - Analyze/Test/Build + Archive + SCP
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_name: ${{ steps.prep_artifact.outputs.artifact_name }}
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # npm 의존성 캐시: setup-node에서 처리
+      - name: Set up Node 20 (+ npm dependency cache)
+        id: setup_node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            **/package-lock.json
+
+      # "중간 산출물" 캐시 (Next.js 빌드 캐시)
+      - name: Cache Next.js build cache (.next/cache)
+        id: cache_next_cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('package-lock.json', '**/package-lock.json', 'next.config.*', 'tsconfig.json') }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-
+
+      # 의존성 설치
+      - name: Install dependencies
+        id: npm_ci
+        run: npm ci
+
+      # 2) 정적 코드 분석
+      # 코드를 예쁘게 만들기(ex: 줄 바꿈, 세미콜론 여부, 따옴표 종류 등)
+      - name: Prettier (check)
+        id: prettier_check
+        run: npx prettier --check .
+        continue-on-error: true # 에러 무시
+
+      # 코드를 올바르게 만들기(ex: 안 쓰는 변수, 선언 전 호출, 논리적 오류 등)
+      - name: ESLint
+        id: eslint
+        run: npm run lint
+        continue-on-error: true # 에러 무시
+
+      # ts 타입 확인
+      - name: TypeScript typecheck
+        id: ts_typecheck
+        run: npx tsc --noEmit
+        continue-on-error: true # 에러 무시
+
+      # 보안 취약점 탐색
+      - name: npm audit (high+)
+        id: npm_audit
+        run: npm audit --audit-level=high
+
+      # E2E 테스트
+      # - name: E2E tests
+      #   id: e2e_tests
+      #   run: |
+      #     npx playwright install --with-deps  # 브라우저 엔진 설치
+      #     npm run dev &                       # 서버를 백그라운드에서 실행
+      #     npx playwright test                 # E2E 테스트 수행
+
+      # 4) 빌드
+      - name: Build (next build)
+        id: build_next
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://dev.fitcheck.kr
+          NEXT_PUBLIC_IMAGE_BASE_URL: https://df1ez4kkj7703.cloudfront.net
+          NEXT_PUBLIC_GA_ID: G-ZJE89QY15L
+          NEXT_PUBLIC_GTM_ID: GTM-M86VXLL2
+
+      # 4.5) 전송할 압축 파일명 만들기
+      - name: Prepare artifact filename (date + commit message)
+        id: prep_artifact
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # KST 기준 날짜
+          DATE="$(TZ=Asia/Seoul date +'%Y%m%d-%H%M%S')"
+
+          # 커밋 메시지 슬러그 생성
+          MSG="$(printf "%s" "${{ github.event.head_commit.message }}" | head -n 1)"
+          SLUG="$(printf "%s" "$MSG" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+            | cut -c1-60)"
+
+          if [ -z "${SLUG}" ]; then SLUG="no-message"; fi
+
+          # 파일명 정의 (확장자 .tgz)
+          TARGET_NAME="${DATE}_${SLUG}.tgz"
+
+          # 압축 실행 (node_modules 제외)
+          tar --exclude=.git \
+              --exclude=.github \
+              --exclude=node_modules \
+              --exclude=.next/cache \
+              --exclude="${TARGET_NAME}" \
+              -czf "${TARGET_NAME}" . || [ $? -eq 1 ]
+
+          echo "artifact_name=${TARGET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "✅ Prepared: ${TARGET_NAME}"
+
+      # 5) scp 전송
+      - name: SCP to EC2
+        run: |
+          mkdir -p ~/.ssh
+          # 서버의 호스트 키를 미리 등록
+          ssh-keyscan -H ${{ secrets.DEV_SERVER_HOST }} >> ~/.ssh/known_hosts
+
+          printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.DEV_SERVER_HOST }} "mkdir -p /home/ec2-user/nextjs"
+
+          scp -i ~/.ssh/id_rsa "${{ steps.prep_artifact.outputs.artifact_name }}" \
+          ${{ secrets.EC2_USER }}@${{ secrets.DEV_SERVER_HOST }}:/home/ec2-user/nextjs/
+
+  cd:
+    name: CD - Deploy to Dev Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: ci-and-delivery
+
+    steps:
+      # SSH 키 설정
+      - name: Setup SSH key
+        id: setup_ssh
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          printf "%s" "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEV_SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to port 3000
+        run: |
+          ssh -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.DEV_SERVER_HOST }}" << 'SSH'
+            set -euo pipefail
+
+            NEXTJS_ROOT="/home/ec2-user/nextjs"
+            CURRENT_LINK="$NEXTJS_ROOT/current"
+            
+            # 이전 Job의 output을 가져옵니다.
+            ARTIFACT_NAME="${{ needs.ci-and-delivery.outputs.artifact_name }}"
+            RELEASE_NAME="${ARTIFACT_NAME%.tgz}"
+            RELEASE_PATH="$NEXTJS_ROOT/$RELEASE_NAME"
+
+            # pm2가 없으면 전역 설치
+            if ! command -v pm2 &> /dev/null; then
+              echo "pm2가 설치되어 있지 않습니다. 설치 중..."
+              sudo npm install -g pm2
+            fi
+
+            echo "=== 배포 시작 (Flat 구조) ==="
+
+            mkdir -p "$RELEASE_PATH"
+            tar -xzf "$NEXTJS_ROOT/$ARTIFACT_NAME" -C "$RELEASE_PATH"
+
+            cd "$RELEASE_PATH"
+            npm ci --production
+
+            rm -rf "$CURRENT_LINK"
+            ln -sfn "$RELEASE_PATH" "$CURRENT_LINK"
+
+            pm2 describe nextjs > /dev/null 2>&1 \
+              && pm2 reload nextjs --update-env \
+              || pm2 start npm --name nextjs --cwd "$CURRENT_LINK" -- start
+            
+            pm2 save
+
+            echo "🧹 오래된 버전 정리 (최신 2개 유지)..."
+            cd "$NEXTJS_ROOT"
+            ls -1dt 20*/ | grep -v "current" | tail -n +3 | xargs -r rm -rf
+            rm -f "$NEXTJS_ROOT/$ARTIFACT_NAME"
+            
+            echo "✅ 배포 완료"
+          SSH
+
+      # 1) 기동/프로세스 레벨: PM2 프로세스 확인
+      - name: "Verify: 1) Process level (PM2)"
+        id: verify_process
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.DEV_SERVER_HOST }}" << 'SSH'
+            set -euo pipefail
+
+            # PM2 프로세스 상태 확인
+            if ! pm2 describe nextjs > /dev/null 2>&1; then
+              echo "❌ PM2 프로세스 'nextjs'가 존재하지 않음"
+              exit 1
+            fi
+
+            # 프로세스가 online 상태인지 확인
+            STATUS=$(pm2 jlist | jq -r '.[] | select(.name=="nextjs") | .pm2_env.status')
+            if [ "$STATUS" != "online" ]; then
+              echo "❌ 프로세스 상태가 online이 아님: $STATUS"
+              exit 1
+            fi
+
+            echo "✅ 프로세스 검증 통과: nextjs (status: $STATUS)"
+          SSH
+
+      # 2) 헬스체크
+      - name: "Verify: 2) Healthcheck"
+        id: verify_health
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.DEV_SERVER_HOST }}" << 'SSH'
+            set -euo pipefail
+
+            echo "포트 3000 헬스체크..."
+
+            # 헬스체크 (최대 30초)
+            for i in {1..10}; do
+              if curl -fsS "http://localhost:3000/" > /dev/null 2>&1; then
+                echo "✅ 헬스체크 통과"
+                exit 0
+              fi
+              echo "시도 $i/10..."
+              sleep 3
+            done
+
+            echo "❌ 헬스체크 실패 (30초 초과)"
+            exit 1
+          SSH
