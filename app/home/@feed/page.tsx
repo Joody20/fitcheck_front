@@ -16,13 +16,16 @@ export default async function HomeFeedSlotPage() {
     after: null,
   });
 
-  const [initialPost, ...virtualPosts] = firstFeed.posts;
-  const virtualFeed = { ...firstFeed, posts: virtualPosts };
+  const [initialPost] = firstFeed.posts;
 
   return (
     <>
       <HomeInitialPostCard post={initialPost} />
-      <HomeFeedSectionClient size={10} initialFeed={virtualFeed} />
+      <HomeFeedSectionClient
+        size={10}
+        initialFeed={firstFeed}
+        excludedPostId={initialPost?.id}
+      />
     </>
   );
 }

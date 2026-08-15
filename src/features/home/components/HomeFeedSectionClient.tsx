@@ -12,6 +12,7 @@ import type { HomePost } from "../hooks/useInfiniteHomeFeed";
 type HomeFeedSectionClientProps = {
   size?: number;
   initialFeed?: GetHomePostsResponse | null;
+  excludedPostId?: number;
 };
 
 function filterOwnPostsByAge(posts: HomePost[]) {
@@ -22,6 +23,7 @@ function filterOwnPostsByAge(posts: HomePost[]) {
 export default function HomeFeedSectionClient({
   size = 10,
   initialFeed = null,
+  excludedPostId,
 }: HomeFeedSectionClientProps) {
   const { ready, isAuthenticated } = useAuth();
   const hasInitialFeed = (initialFeed?.posts?.length ?? 0) > 0;
@@ -40,7 +42,13 @@ export default function HomeFeedSectionClient({
     initialData: hasInitialFeed ? initialFeed : null,
   });
 
-  const visiblePosts = useMemo(() => filterOwnPostsByAge(posts), [posts]);
+  const visiblePosts = useMemo(
+    () =>
+      filterOwnPostsByAge(posts).filter(
+        (post) => post.id !== excludedPostId,
+      ),
+    [excludedPostId, posts],
+  );
 
   useHomeScrollRestoration(visiblePosts.length);
 
