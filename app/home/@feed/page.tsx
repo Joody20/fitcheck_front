@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import HomeFeedSectionClient from "@/src/features/home/components/HomeFeedSectionClient";
+import HomeInitialPostCard from "@/src/features/home/components/HomeInitialPostCard";
 import { getHomePostsServer } from "@/src/features/home/api/getHomePosts";
 
 function toCookieHeader(entries: { name: string; value: string }[]) {
@@ -15,5 +16,13 @@ export default async function HomeFeedSlotPage() {
     after: null,
   });
 
-  return <HomeFeedSectionClient size={10} initialFeed={firstFeed} />;
+  const [initialPost, ...virtualPosts] = firstFeed.posts;
+  const virtualFeed = { ...firstFeed, posts: virtualPosts };
+
+  return (
+    <>
+      <HomeInitialPostCard post={initialPost} />
+      <HomeFeedSectionClient size={10} initialFeed={virtualFeed} />
+    </>
+  );
 }
