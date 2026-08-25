@@ -1,0 +1,350 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMotionValue, useTransform } from "framer-motion";
+import { getVoteCandidates } from "../api/getVoteCandidates";
+import { participateVote } from "../api/participateVote";
+import { getVoteResult } from "../api/getVoteResult";
+import { resolveMediaUrl } from "@/src/features/profile/utils/resolveMediaUrl";
+
+type VoteCard = {
+  id: string;
+  imageUrl: string;
+};
+
+const THRESHOLD = 120;
+const RESULT_REVEAL_DELAY_MS = 3000;
+const MOCK_VOTE_ID = "mock-vote-1";
+const MOCK_VOTE_TITLE = "어떤 룩이 더 어울릴까요?";
+const MOCK_VOTE_ITEMS: VoteCard[] = [
+  { id: "mock-1", imageUrl: "/images/vote_1.jpeg" },
+  { id: "mock-2", imageUrl: "/images/vote_2.jpeg" },
+  { id: "mock-3", imageUrl: "/images/vote_3.webp" },
+  { id: "mock-4", imageUrl: "/images/vote_4.webp" },
+];
+
+function buildMockCandidates() {
+  return {
+    id: MOCK_VOTE_ID,
+    title: MOCK_VOTE_TITLE,
+    items: MOCK_VOTE_ITEMS,
+  };
+}
+
+function getMockResultStats(length: number) {
+  if (length === 0) return [];
+  const mockPercents = [38, 27, 22, 13];
+  const totalVotes = 126;
+  return new Array(length).fill(null).map((_, index) => {
+    const likePercent = mockPercents[index] ?? 10;
+    return {
+      likePercent,
+      likeCount: Math.round((totalVotes * likePercent) / 100),
+    };
+  });
+}
+
+export function useVoteFlow() {
+  const [cards, setCards] = useState<VoteCard[]>([]);
+  const [title, setTitle] = useState("");
+  const [voteId, setVoteId] = useState<number | string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [index, setIndex] = useState(0);
+  const [exitDirection, setExitDirection] = useState<"left" | "right">("right");
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Array<number | string>>([]);
+  const selectedIdsRef = useRef<Array<number | string>>([]);
+  const selectedByIndexRef = useRef<Record<number, number | string>>({});
+  const [resultItems, setResultItems] = useState<VoteCard[]>([]);
+  const [resultStats, setResultStats] = useState<
+    { likeCount: number; likePercent: number }[]
+  >([]);
+  const [submitting, setSubmitting] = useState(false);
+  const submitAttemptedRef = useRef(false);
+  const [noActiveVote, setNoActiveVote] = useState(false);
+  const transitionCommittedRef = useRef(false);
+  const pendingAnimatedIndexRef = useRef<number | null>(null);
+  const pendingAnimatedCardIdRef = useRef<string | null>(null);
+  const resultRevealTimerRef = useRef<number | null>(null);
+
+  const total = cards.length;
+  const active = cards[index];
+  const prev = cards[index - 1];
+  const next = cards[index + 1];
+  const isFinished = total > 0 && index >= total;
+
+  const x = useMotionValue(0);
+  const rotateY = useTransform(x, [-200, 0, 200], [-40, 0, 40]);
+  const rotateZ = useTransform(x, [-200, 0, 200], [-14, 0, 14]);
+  const scale = useTransform(x, [-220, 0, 220], [0.94, 1, 0.94]);
+  const opacity = useTransform(
+    x,
+    [-260, -140, 0, 140, 260],
+    [0.25, 1, 1, 1, 0.25],
+  );
+
+  const progressLabel = useMemo(
+    () => `${Math.min(index + 1, total)}/${total}`,
+    [index, total],
+  );
+
+  const addSelection = useCallback((cardIndex: number, id: number | string) => {
+    selectedByIndexRef.current[cardIndex] = id;
+    const next = Object.keys(selectedByIndexRef.current)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => selectedByIndexRef.current[Number(key)]);
+    selectedIdsRef.current = next;
+    setSelectedIds(next);
+  }, []);
+
+  const commitTransition = useCallback(
+    (expectedIndex: number, completedCardId?: string | null) => {
+      if (!isAnimating) return;
+      if (transitionCommittedRef.current) return;
+      if (pendingAnimatedIndexRef.current !== expectedIndex) return;
+      if (
+        pendingAnimatedCardIdRef.current &&
+        completedCardId &&
+        pendingAnimatedCardIdRef.current !== completedCardId
+      ) {
+        return;
+      }
+
+      transitionCommittedRef.current = true;
+      pendingAnimatedIndexRef.current = null;
+      pendingAnimatedCardIdRef.current = null;
+      setIndex((prevIndex) => {
+        if (prevIndex !== expectedIndex) return prevIndex;
+        return Math.min(prevIndex + 1, total);
+      });
+      setExitDirection("right");
+      setIsAnimating(false);
+      x.set(0);
+    },
+    [isAnimating, total, x],
+  );
+
+  const paginate = useCallback(
+    (direction: "left" | "right") => {
+      if (isAnimating || index >= total) return;
+      if (direction === "right" && active) {
+        addSelection(index, active.id);
+      }
+      transitionCommittedRef.current = false;
+      pendingAnimatedIndexRef.current = index;
+      pendingAnimatedCardIdRef.current = active ? String(active.id) : null;
+      setExitDirection(direction);
+      setIsAnimating(true);
+    },
+    [active, addSelection, index, isAnimating, total],
+  );
+
+  const handleDragEnd = useCallback(
+    (offsetX: number) => {
+      if (Math.abs(offsetX) > THRESHOLD) {
+        paginate(offsetX > 0 ? "right" : "left");
+        return;
+      }
+      x.set(0);
+    },
+    [paginate, x],
+  );
+
+  const handleAnimationComplete = useCallback(
+    (completedCardId?: string) => {
+      const pendingIndex = pendingAnimatedIndexRef.current;
+      if (pendingIndex == null) return;
+      commitTransition(pendingIndex, completedCardId ?? null);
+    },
+    [commitTransition],
+  );
+
+  const refreshCandidates = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await getVoteCandidates();
+      console.log("[vote] candidates response", result);
+      const next = result ?? buildMockCandidates();
+      setCards(next.items);
+      setTitle(next.title);
+      setVoteId(next.id ?? null);
+      setNoActiveVote(false);
+      setIndex(0);
+      selectedIdsRef.current = [];
+      selectedByIndexRef.current = {};
+      setSelectedIds([]);
+      setResultItems([]);
+      setResultStats([]);
+      setShowResult(false);
+      setIsAnimating(false);
+      setExitDirection("right");
+      transitionCommittedRef.current = false;
+      pendingAnimatedIndexRef.current = null;
+      pendingAnimatedCardIdRef.current = null;
+      if (resultRevealTimerRef.current) {
+        clearTimeout(resultRevealTimerRef.current);
+        resultRevealTimerRef.current = null;
+      }
+      x.set(0);
+      submitAttemptedRef.current = false;
+    } catch {
+      const next = buildMockCandidates();
+      setCards(next.items);
+      setTitle(next.title);
+      setVoteId(next.id);
+      setNoActiveVote(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [x]);
+
+  useEffect(() => {
+    if (!isFinished || !voteId) {
+      if (resultRevealTimerRef.current) {
+        clearTimeout(resultRevealTimerRef.current);
+        resultRevealTimerRef.current = null;
+      }
+      setShowResult(false);
+      return;
+    }
+    if (submitting || submitAttemptedRef.current) return;
+    if (String(voteId).startsWith("mock-")) {
+      submitAttemptedRef.current = true;
+      setResultItems(
+        cards.map((card) => ({
+          ...card,
+          imageUrl: card.imageUrl || "/images/white.png",
+        })),
+      );
+      setResultStats(getMockResultStats(cards.length));
+      resultRevealTimerRef.current = window.setTimeout(() => {
+        setShowResult(true);
+        resultRevealTimerRef.current = null;
+      }, RESULT_REVEAL_DELAY_MS);
+      return;
+    }
+    if (selectedIdsRef.current.length === 0) {
+      submitAttemptedRef.current = true;
+      void refreshCandidates();
+      return;
+    }
+    setShowResult(false);
+    setSubmitting(true);
+    submitAttemptedRef.current = true;
+    console.log("[vote] participate payload", {
+      voteId,
+      voteItemIds: selectedIdsRef.current,
+    });
+    participateVote(voteId, selectedIdsRef.current)
+      .then(() => getVoteResult(voteId))
+      .then((data) => {
+        console.log("[vote] result response", data);
+        const items = (data.items ?? []).slice().sort((a, b) => {
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        });
+        const mappedCards = items.map((item) => {
+          const rawImage =
+            (
+              item as {
+                accessUrl?: string | null;
+                imageUrl?: string | null;
+                url?: string | null;
+              }
+            ).accessUrl ??
+            (
+              item as {
+                accessUrl?: string | null;
+                imageUrl?: string | null;
+                url?: string | null;
+              }
+            ).imageUrl ??
+            (
+              item as {
+                accessUrl?: string | null;
+                imageUrl?: string | null;
+                url?: string | null;
+              }
+            ).url ??
+            item.imageObjectKey ??
+            null;
+          const resolved = resolveMediaUrl(rawImage ?? undefined) ?? "";
+          const isInvalid = resolved.endsWith("/string");
+          return {
+            id: String(item.id),
+            imageUrl: isInvalid ? "/images/white.png" : resolved,
+          };
+        });
+        const mappedStats = items.map((item) => ({
+          likeCount: item.fitCount ?? 0,
+          likePercent: item.fitRate ?? 0,
+        }));
+        setResultItems(
+          mappedCards.map((card) => ({
+            ...card,
+            imageUrl: card.imageUrl || "/images/white.png",
+          })),
+        );
+        setResultStats(mappedStats);
+        resultRevealTimerRef.current = window.setTimeout(() => {
+          setShowResult(true);
+          resultRevealTimerRef.current = null;
+        }, RESULT_REVEAL_DELAY_MS);
+      })
+      .catch(() => {
+        setResultItems([]);
+        setResultStats([]);
+        resultRevealTimerRef.current = window.setTimeout(() => {
+          setShowResult(true);
+          resultRevealTimerRef.current = null;
+        }, RESULT_REVEAL_DELAY_MS);
+      })
+      .finally(() => {
+        setSubmitting(false);
+      });
+  }, [cards, isFinished, refreshCandidates, submitting, voteId]);
+
+  useEffect(() => {
+    return () => {
+      if (resultRevealTimerRef.current) {
+        clearTimeout(resultRevealTimerRef.current);
+        resultRevealTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    refreshCandidates();
+  }, [refreshCandidates]);
+
+  return {
+    cards,
+    title,
+    loading,
+    index,
+    total,
+    active,
+    prev,
+    next,
+    progressLabel,
+    isFinished,
+    showResult,
+    exitDirection,
+    isAnimating,
+    x,
+    rotateY,
+    rotateZ,
+    scale,
+    opacity,
+    paginate,
+    handleDragEnd,
+    handleAnimationComplete,
+    refreshCandidates,
+    selectedIds,
+    setSelectedIds,
+    addSelection,
+    resultItems,
+    resultStats,
+    noActiveVote,
+  };
+}
