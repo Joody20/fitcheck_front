@@ -1,6 +1,7 @@
 "use client";
 
 import AppHeader from "@/src/shared/components/layout/AppHeader";
+import { useHomePostFocusRestoration } from "../hooks/useHomePostFocusRestoration";
 import { useHomeQuerySync } from "../hooks/useHomeQuerySync";
 import { useSignupWelcomeToast } from "../hooks/useSignupWelcomeToast";
 
@@ -16,6 +17,7 @@ export default function HomePage({
   const toastMessage = useSignupWelcomeToast();
 
   useHomeQuerySync();
+  useHomePostFocusRestoration();
 
   return (
     <>

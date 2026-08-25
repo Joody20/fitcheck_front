@@ -50,7 +50,12 @@ export default function HomeFeedSectionClient({
     [excludedPostId, posts],
   );
 
-  useHomeScrollRestoration(visiblePosts.length);
+  useHomeScrollRestoration({
+    postsLength: visiblePosts.length,
+    hasMore: feedEnabled && postsHasMore,
+    isFetchingMore: isFetchingNextPage,
+    loadMore,
+  });
 
   if (!ready && posts.length === 0) {
     return <HomeFeedSkeleton />;

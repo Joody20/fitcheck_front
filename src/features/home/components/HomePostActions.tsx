@@ -3,7 +3,10 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useHomeFeedPostActions } from "@/src/features/home/hooks/useHomeFeedPostActions";
-import { saveHomeScrollPosition } from "../utils/homeScrollPosition";
+import {
+  saveHomePostFocusTarget,
+  saveHomeScrollPosition,
+} from "../utils/homeScrollPosition";
 import {
   dismissBookmarkAddedToast,
   showBookmarkAddedToast,
@@ -92,6 +95,7 @@ export default function HomePostActions({
 
   const handleOpenPostDetail = () => {
     saveHomeScrollPosition();
+    saveHomePostFocusTarget({ postId, trigger: "comment" });
     router.push(`/post/${postId}?from=home`);
   };
 
@@ -120,6 +124,8 @@ export default function HomePostActions({
           onClick={handleOpenPostDetail}
           className="flex items-center gap-2 text-neutral-900"
           aria-label="댓글"
+          data-home-post-id={postId}
+          data-home-post-trigger="comment"
         >
           <Image src="/icons/comment.svg" alt="" width={22} height={22} />
           <span className="text-[14px] font-semibold">

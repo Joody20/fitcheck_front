@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import LikeBurstHeart from "@/src/components/LikeBurstHeart";
-import { saveHomeScrollPosition } from "../utils/homeScrollPosition";
+import {
+  saveHomePostFocusTarget,
+  saveHomeScrollPosition,
+} from "../utils/homeScrollPosition";
 
 type HomePostMediaProps = {
   postId: number;
@@ -26,6 +29,7 @@ export default function HomePostMedia({
 
   const handleOpenPostDetail = () => {
     saveHomeScrollPosition();
+    saveHomePostFocusTarget({ postId, trigger: "media" });
     router.push(`/post/${postId}?from=home`);
   };
 
@@ -62,6 +66,8 @@ export default function HomePostMedia({
               onClick={handleOpenPostDetail}
               className="relative block h-full w-full"
               aria-label="게시물 이미지"
+              data-home-post-id={postId}
+              data-home-post-trigger="media"
             >
               <Image
                 src={src}

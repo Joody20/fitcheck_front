@@ -4,83 +4,85 @@ import {
   saveHomeScrollPosition,
 } from "../utils/homeScrollPosition";
 
-export function useHomeScrollRestoration(postsLength: number) {
-  const restoreAttemptedRef = useRef(false);
+type Options = {
+  postsLength: number;
+  hasMore: boolean;
+  isFetchingMore: boolean;
+  loadMore: () => void;
+};
+
+export function useHomeScrollRestoration({
+  postsLength,
+  hasMore,
+  isFetchingMore,
+  loadMore,
+}: Options) {
+  const restoredRef = useRef(false);
   const pendingScrollYRef = useRef<number | null>(null);
+  const lastLoadRequestPostsLengthRef = useRef<number | null>(null);
+  const restoringRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     pendingScrollYRef.current = readHomeScrollPosition();
-
-    if ("scrollRestoration" in window.history) {
-      window.history.scrollRestoration = "manual";
-    }
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
 
     const saveScroll = () => {
-      saveHomeScrollPosition();
-    };
-    const onScroll = () => {
-      saveScroll();
-    };
-    const onPageHide = () => {
-      saveScroll();
+      if (!restoringRef.current) saveHomeScrollPosition();
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        saveScroll();
-      }
+      if (document.visibilityState === "hidden") saveScroll();
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("scroll", saveScroll, { passive: true });
+    window.addEventListener("pagehide", saveScroll);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("scroll", saveScroll);
+      window.removeEventListener("pagehide", saveScroll);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      saveHomeScrollPosition();
+      saveScroll();
+      window.history.scrollRestoration = previousScrollRestoration;
     };
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (restoreAttemptedRef.current) return;
+    if (typeof window === "undefined" || restoredRef.current) return;
     const targetY = pendingScrollYRef.current;
     if (targetY == null) return;
 
-    let tries = 0;
-    const maxTries = 40;
-    let intervalId: number | null = null;
+    const restoreWhenReady = () => {
+      const maxScrollY = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
 
-    const attempt = () => {
-      const doc = document.documentElement;
-      const canScroll = doc.scrollHeight >= targetY + window.innerHeight - 20;
-
-      if (canScroll || tries >= maxTries) {
-        window.scrollTo(0, targetY);
-        restoreAttemptedRef.current = true;
-        if (intervalId != null) {
-          window.clearInterval(intervalId);
+      if (maxScrollY < targetY - 20 && hasMore) {
+        // 가상 피드는 현재 위치를 기준으로만 다음 페이지를 요청합니다.
+        // 복원 대상이 더 아래라면 필요한 높이가 생길 때까지 직접 이어 받습니다.
+        if (
+          !isFetchingMore &&
+          lastLoadRequestPostsLengthRef.current !== postsLength
+        ) {
+          lastLoadRequestPostsLengthRef.current = postsLength;
+          loadMore();
         }
         return;
       }
 
-      tries += 1;
-      requestAnimationFrame(attempt);
+      restoringRef.current = true;
+      window.scrollTo(0, targetY);
+      window.requestAnimationFrame(() => {
+        restoringRef.current = false;
+        saveHomeScrollPosition();
+      });
+      restoredRef.current = true;
     };
 
-    requestAnimationFrame(attempt);
-    intervalId = window.setInterval(attempt, 200);
-    const onLoad = () => attempt();
-    window.addEventListener("load", onLoad);
-
-    return () => {
-      if (intervalId != null) {
-        window.clearInterval(intervalId);
-      }
-      window.removeEventListener("load", onLoad);
-    };
-  }, [postsLength]);
+    const frameId = window.requestAnimationFrame(restoreWhenReady);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [hasMore, isFetchingMore, loadMore, postsLength]);
 }
