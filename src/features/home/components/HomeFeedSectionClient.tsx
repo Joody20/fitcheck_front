@@ -34,7 +34,10 @@ export default function HomeFeedSectionClient({
     items: posts,
     hasMore: postsHasMore,
     loading,
-    isFetchingNextPage,
+    isFetching,
+    isError,
+    hasData,
+    nextCursor,
     loadMore,
   } = useInfiniteHomeFeed({
     size,
@@ -51,9 +54,12 @@ export default function HomeFeedSectionClient({
   );
 
   useHomeScrollRestoration({
+    ready: feedEnabled && hasData,
+    failed: feedEnabled && isError,
     postsLength: visiblePosts.length,
+    nextCursor,
     hasMore: feedEnabled && postsHasMore,
-    isFetchingMore: isFetchingNextPage,
+    isFetching,
     loadMore,
   });
 
@@ -74,7 +80,7 @@ export default function HomeFeedSectionClient({
       <HomeVirtualFeed
         posts={visiblePosts}
         hasMore={feedEnabled && postsHasMore}
-        loading={isFetchingNextPage}
+        loading={isFetching}
         loadMore={loadMore}
       />
     </>

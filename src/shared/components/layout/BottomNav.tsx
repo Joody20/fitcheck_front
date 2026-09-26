@@ -90,6 +90,7 @@ export default function BottomNav() {
                 <Link
                   href={item.href}
                   prefetch={false}
+                  scroll={item.href === "/home" ? false : undefined}
                   className="flex flex-col items-center gap-1"
                 >
                   <Image

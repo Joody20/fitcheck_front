@@ -2,15 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { PostDetail } from "../types/postDetail";
 import PostDetailPage from "./PostDetailPage";
 
 type Props = {
   postId: string;
-  initialPost: PostDetail;
 };
 
-export default function PostDetailModal({ postId, initialPost }: Props) {
+export default function PostDetailModal({ postId }: Props) {
   const router = useRouter();
 
   useEffect(() => {
@@ -43,7 +41,7 @@ export default function PostDetailModal({ postId, initialPost }: Props) {
         aria-label="게시물 상세"
         className="mx-auto h-full w-full max-w-107.5 overflow-y-auto overscroll-contain bg-white shadow-2xl"
       >
-        <PostDetailPage postId={postId} initialPost={initialPost} />
+        <PostDetailPage postId={postId} />
       </section>
     </div>
   );

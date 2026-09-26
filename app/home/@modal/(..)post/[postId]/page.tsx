@@ -1,5 +1,3 @@
-import { notFound } from "next/navigation";
-import { getPostDetailServer } from "@/src/features/post/api/getPostDetailServer";
 import PostDetailModal from "@/src/features/post/components/PostDetailModal";
 
 type Props = {
@@ -10,11 +8,5 @@ type Props = {
 // URL을 직접 열거나 새로고침하면 일반 상세 페이지가 렌더링됩니다.
 export default async function HomePostDetailModalPage({ params }: Props) {
   const { postId } = await params;
-  const post = await getPostDetailServer(postId);
-
-  if (!post) {
-    notFound();
-  }
-
-  return <PostDetailModal postId={postId} initialPost={post} />;
+  return <PostDetailModal postId={postId} />;
 }
