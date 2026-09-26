@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useWindowVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import type { HomePost } from "../hooks/useInfiniteHomeFeed";
 import HomePostCard from "./HomePostCard";
+import { readHomeScrollPosition } from "../utils/homeScrollPosition";
 import { useVirtualFeedLoadMore } from "../hooks/useVirtualFeedLoadMore";
 
 type HomeVirtualFeedProps = {
@@ -16,6 +17,14 @@ type HomeVirtualFeedProps = {
 const DEFAULT_ESTIMATED_ROW_HEIGHT = 500;
 const DEFAULT_OVERSCAN = 2;
 
+// 최근 홈 목록 하나만 보관합니다. 목록이나 화면 너비가 달라지면 재측정합니다.
+let lastMeasurements: {
+  width: number;
+  postIds: number[];
+  scrollMargin: number;
+  rows: VirtualItem[];
+} | null = null;
+
 export default function HomeVirtualFeed({
   posts,
   hasMore,
@@ -23,9 +32,21 @@ export default function HomeVirtualFeed({
   loadMore,
 }: HomeVirtualFeedProps) {
   const containerRef = useRef<HTMLElement | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
+  const [initialMeasurements] = useState(() => {
+    if (
+      typeof window === "undefined" ||
+      !lastMeasurements ||
+      lastMeasurements.width !== window.innerWidth ||
+      lastMeasurements.postIds.length !== posts.length ||
+      !posts.every((post, index) => post.id === lastMeasurements?.postIds[index])
+    ) return null;
+    return lastMeasurements;
+  });
+  const [scrollMargin, setScrollMargin] = useState(
+    initialMeasurements?.scrollMargin ?? 0,
+  );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateScrollMargin = () => {
       const container = containerRef.current;
       if (!container) return;
@@ -51,12 +72,34 @@ export default function HomeVirtualFeed({
     onLoadMore: loadMore,
   });
 
+  const getItemKey = useCallback(
+    (index: number) => posts[index]?.id ?? "home-feed-loader",
+    [posts],
+  );
+
   const rowVirtualizer = useWindowVirtualizer({
     count: totalCount,
+    initialOffset: () => readHomeScrollPosition() ?? 0,
+    initialMeasurementsCache: initialMeasurements?.rows,
+    getItemKey,
     estimateSize: () => DEFAULT_ESTIMATED_ROW_HEIGHT,
     overscan: DEFAULT_OVERSCAN,
     scrollMargin,
-    onChange: onVirtualChange,
+    onChange: (instance) => {
+      if (
+        lastMeasurements?.rows !== instance.measurementsCache ||
+        lastMeasurements.width !== window.innerWidth ||
+        lastMeasurements.scrollMargin !== instance.options.scrollMargin
+      ) {
+        lastMeasurements = {
+          width: window.innerWidth,
+          postIds: posts.map((post) => post.id),
+          scrollMargin: instance.options.scrollMargin,
+          rows: instance.measurementsCache,
+        };
+      }
+      onVirtualChange(instance);
+    },
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();

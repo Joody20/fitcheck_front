@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { usePostDetail } from "../hooks/usePostDetail";
-import type { PostDetail } from "../types/postDetail";
 
 import PostHeader from "./PostHeader";
 import PostDeleteConfirmModal from "./PostDeleteConfirmModal";
@@ -16,17 +15,16 @@ import {
 
 type PostDetailPageProps = {
   postId: string;
-  initialPost: PostDetail;
 };
 
 export default function PostDetailPage({
   postId,
-  initialPost,
 }: PostDetailPageProps) {
   const [likeBurstTrigger, setLikeBurstTrigger] = useState(0);
   const {
     post,
     loading,
+    isError,
     sortedImageUrls,
     deleteOpen,
     setDeleteOpen,
@@ -34,7 +32,7 @@ export default function PostDetailPage({
     me,
     handleEdit,
     handleDeleteConfirm,
-  } = usePostDetail({ postId, initialPost });
+  } = usePostDetail({ postId });
 
   const commentCountStore = useCommentCountStore(
     post?.aggregate.commentCount ?? 0,
@@ -49,7 +47,13 @@ export default function PostDetailPage({
     );
   }
 
-  if (!post) return null;
+  if (isError || !post) {
+    return (
+      <div role="status" className="flex min-h-screen items-center justify-center">
+        게시글을 불러올 수 없습니다. 삭제되었거나 존재하지 않는 게시글일 수 있어요.
+      </div>
+    );
+  }
 
   return (
     <CommentCountProvider value={commentCountStore}>

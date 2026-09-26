@@ -17,7 +17,7 @@ export async function deletePost(postId: string) {
     throw new Error(`(${res.status}) ${message}`);
   }
 
-  void revalidatePostDetail(postId, "delete");
+  await revalidatePostDetail(postId, "delete");
 
   return { status: res.status, body: parsed };
 }

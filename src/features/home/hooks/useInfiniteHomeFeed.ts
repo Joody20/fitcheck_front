@@ -86,52 +86,59 @@ export function useInfiniteHomeFeed(params?: {
   const initialData = params?.initialData;
   const hasSeededPosts = (initialData?.posts?.length ?? 0) > 0;
 
-  const { data, hasNextPage, isLoading, isFetchingNextPage, fetchNextPage } =
-    useInfiniteQuery<
-      GetHomePostsResponse,
-      Error,
-      HomeFeedQueryData,
-      ["home-feed", { size: number }, "infinite"],
-      string | null
-    >({
-      queryKey: ["home-feed", { size }, "infinite"],
-      enabled,
-      initialPageParam: null as string | null,
-      initialData: initialData
-        ? {
-            pages: [initialData],
-            pageParams: [null],
-          }
-        : undefined,
-      select: (infiniteData) => {
-        const deduped = new Map<number, HomePost>();
-        infiniteData.pages.forEach((page) => {
-          mapHomePosts(page).forEach((item) => deduped.set(item.id, item));
-        });
-        return {
-          ...infiniteData,
-          items: Array.from(deduped.values()),
-        };
-      },
-      refetchOnMount: hasSeededPosts ? false : true,
-      refetchOnWindowFocus: false,
-      // 짧은 staleTime으로 과도한 재요청은 줄이고 최신성은 유지합니다.
-      staleTime: 30_000,
-      gcTime: 10 * 60_000,
-      queryFn: async ({ pageParam }) =>
-        getHomePosts({
-          size,
-          after: pageParam ?? undefined,
-        }),
-      getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-        const rawNextCursor =
-          lastPage.nextCursor === "" ? null : (lastPage.nextCursor ?? null);
-        if (rawNextCursor == null) return undefined;
-        // 같은 커서 반복 응답 시 무한 재호출을 방지합니다.
-        if (rawNextCursor === lastPageParam) return undefined;
-        return rawNextCursor;
-      },
-    });
+  const {
+    data,
+    hasNextPage,
+    isLoading,
+    isFetching,
+    isError,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery<
+    GetHomePostsResponse,
+    Error,
+    HomeFeedQueryData,
+    ["home-feed", { size: number }, "infinite"],
+    string | null
+  >({
+    queryKey: ["home-feed", { size }, "infinite"],
+    enabled,
+    initialPageParam: null as string | null,
+    initialData: initialData
+      ? {
+          pages: [initialData],
+          pageParams: [null],
+        }
+      : undefined,
+    select: (infiniteData) => {
+      const deduped = new Map<number, HomePost>();
+      infiniteData.pages.forEach((page) => {
+        mapHomePosts(page).forEach((item) => deduped.set(item.id, item));
+      });
+      return {
+        ...infiniteData,
+        items: Array.from(deduped.values()),
+      };
+    },
+    refetchOnMount: hasSeededPosts ? false : true,
+    refetchOnWindowFocus: false,
+    // 짧은 staleTime으로 과도한 재요청은 줄이고 최신성은 유지합니다.
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    queryFn: async ({ pageParam }) =>
+      getHomePosts({
+        size,
+        after: pageParam ?? undefined,
+      }),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const rawNextCursor =
+        lastPage.nextCursor === "" ? null : (lastPage.nextCursor ?? null);
+      if (rawNextCursor == null) return undefined;
+      // 같은 커서 반복 응답 시 무한 재호출을 방지합니다.
+      if (rawNextCursor === lastPageParam) return undefined;
+      return rawNextCursor;
+    },
+  });
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
 
@@ -140,15 +147,19 @@ export function useInfiniteHomeFeed(params?: {
   const loadMore = useCallback(() => {
     if (!enabled) return;
     if (!hasNextPage) return;
-    if (isFetchingNextPage) return;
+    if (isFetching) return;
     void fetchNextPage();
-  }, [enabled, fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [enabled, fetchNextPage, hasNextPage, isFetching]);
 
   return {
     items: enabled ? items : [],
     hasMore,
     loading,
     isFetchingNextPage,
+    isFetching,
+    isError,
+    hasData: data !== undefined,
+    nextCursor: data?.pages[data.pages.length - 1]?.nextCursor ?? null,
     loadMore,
   };
 }

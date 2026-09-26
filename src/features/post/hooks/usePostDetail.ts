@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 
+import { getPostDetail } from "../api/getPostDetail";
 import { deletePost } from "../api/deletePost";
 import { dispatchPostCountChange } from "../utils/postCountEvents";
 import {
@@ -51,17 +52,26 @@ function normalizePostImageUrls(
 
 type UsePostDetailOptions = {
   postId: string;
-  initialPost: PostDetail;
 };
 
-export function usePostDetail({ postId, initialPost }: UsePostDetailOptions) {
+export function usePostDetail({ postId }: UsePostDetailOptions) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const { currentMember } = useAuth();
+  const { currentMember, ready, isAuthenticated } = useAuth();
 
-  const post = initialPost;
-  const loading = false;
+  // The demo writes to browser storage, so detail reads must use that same store.
+  const { data: post, isPending, isError } = useQuery({
+    queryKey: ["post-detail", postId],
+    queryFn: async () => {
+      const result = await getPostDetail(postId);
+      return result.data as PostDetail;
+    },
+    enabled: ready && isAuthenticated,
+    refetchOnMount: "always",
+    retry: false,
+  });
+  const loading = !ready || (isAuthenticated && isPending);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const me = currentMember;
 
@@ -116,6 +126,7 @@ export function usePostDetail({ postId, initialPost }: UsePostDetailOptions) {
     postId,
     post,
     loading,
+    isError,
     sortedImageUrls,
     deleteOpen,
     setDeleteOpen,
